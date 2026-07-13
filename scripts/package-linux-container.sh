@@ -57,6 +57,7 @@ export OUTPUT="$appimage_path"
 linuxdeploy --appimage-extract-and-run \
     --appdir "$APPDIR" \
     --executable target/release/texti \
+    --library /lib/x86_64-linux-gnu/libxkbcommon-x11.so.0 \
     --desktop-file packaging/linux/texti.desktop \
     --icon-file packaging/linux/texti.svg \
     --output appimage

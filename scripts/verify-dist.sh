@@ -37,6 +37,7 @@ grep -Fx " Package: texti" "$TMP_ROOT/deb-info.txt"
 grep -Fx " Version: ${version}-1" "$TMP_ROOT/deb-info.txt"
 grep -Fx " Architecture: amd64" "$TMP_ROOT/deb-info.txt"
 grep -F " Maintainer: Clairos Group LLC <connect@clairos.ai>" "$TMP_ROOT/deb-info.txt"
+grep -E '^ Depends: .*libxkbcommon-x11-0' "$TMP_ROOT/deb-info.txt"
 
 mkdir -p "$TMP_ROOT/deb" "$TMP_ROOT/appimage"
 dpkg-deb --extract "$deb_path" "$TMP_ROOT/deb"
@@ -49,6 +50,11 @@ deb_binary="$TMP_ROOT/deb/usr/bin/texti"
 )
 appimage_binary="$TMP_ROOT/appimage/squashfs-root/usr/bin/texti"
 [[ "$("$appimage_binary" --version)" == "Texti $version" ]]
+if [[ -z "$(find "$TMP_ROOT/appimage/squashfs-root/usr/lib" -maxdepth 1 \
+    -name 'libxkbcommon-x11.so*' -print -quit)" ]]; then
+    printf 'error: AppImage does not bundle libxkbcommon-x11\n' >&2
+    exit 1
+fi
 
 deb_build_id="$(readelf -n "$deb_binary" | sed -n -E 's/^[[:space:]]*Build ID: ([[:xdigit:]]+)$/\1/p')"
 appimage_build_id="$(readelf -n "$appimage_binary" | sed -n -E 's/^[[:space:]]*Build ID: ([[:xdigit:]]+)$/\1/p')"

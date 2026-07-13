@@ -42,7 +42,12 @@ jobs:
       - name: Install package smoke-test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes binutils desktop-file-utils xdotool xvfb
+          sudo apt-get install --yes \
+            binutils \
+            desktop-file-utils \
+            libxkbcommon-x11-0 \
+            xdotool \
+            xvfb
 
       - name: Scan release history for secrets
         run: scripts/check-secrets.sh

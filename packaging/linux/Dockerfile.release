@@ -29,6 +29,7 @@ RUN apt-get update \
         libxcb-xfixes0-dev \
         libxcb1-dev \
         libxkbcommon-dev \
+        libxkbcommon-x11-0 \
         lintian \
         patchelf \
         pkg-config \
