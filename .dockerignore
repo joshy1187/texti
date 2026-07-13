@@ -1,0 +1,16 @@
+.git
+.github
+.cache
+.cargo-home
+.release-tools
+.appimage-work
+.flatpak-builder
+AppDir
+build-dir
+dist
+repo
+target
+*.AppImage
+*.deb
+*.log
+*.png

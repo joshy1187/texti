@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Texti
+GenericName=Text Editor
+Comment=Linux-native editor for code, configs, logs, and text
+Exec=texti %F
+Icon=texti
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;text/markdown;text/html;text/css;text/javascript;text/rust;text/x-csrc;text/x-chdr;text/x-c++src;text/x-c++hdr;text/x-java;text/x-python;text/x-python3;text/x-go;text/x-lua;text/x-makefile;text/x-cmake;application/json;application/ld+json;application/xml;application/yaml;application/toml;application/typescript;application/sql;application/x-shellscript;application/x-perl;application/x-php;application/x-ruby;application/x-desktop;
+StartupNotify=true
+Keywords=editor;text;code;source;config;logs;rust;slint;

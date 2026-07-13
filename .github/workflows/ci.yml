@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install system checks
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes desktop-file-utils shellcheck
+
+      - name: Install pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.97.0
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny --version 0.19.8
+
+      - name: Scan Git history for secrets
+        run: scripts/check-secrets.sh
+
+      - name: Check shell scripts
+        run: shellcheck scripts/*.sh
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Check dependency policy
+        run: cargo deny check
+
+      - name: Validate desktop entry
+        run: desktop-file-validate packaging/linux/texti.desktop
+
+      - name: Inspect Cargo package contents
+        run: cargo package -p texti-app --list --allow-dirty > /dev/null
+
+      - name: Build locked release
+        run: cargo build --locked --release -p texti-app -j 1

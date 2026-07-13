@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to package or repair
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  linux-packages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Validate release tag
+        run: |
+          version="$(awk '$0 == "[workspace.package]" { in_package = 1; next } in_package && $1 == "version" { gsub(/["[:space:]]/, "", $3); print $3; exit }' Cargo.toml)"
+          test "$RELEASE_TAG" = "v$version"
+          printf 'Packaging Texti %s\n' "$version"
+
+      - name: Install package smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes binutils desktop-file-utils xdotool xvfb
+
+      - name: Scan release history for secrets
+        run: scripts/check-secrets.sh
+
+      - name: Build portable Linux packages
+        run: scripts/package-linux.sh
+
+      - name: Verify packaged applications
+        run: xvfb-run --auto-servernum scripts/verify-dist.sh
+
+      - name: Publish GitHub Release
+        run: |
+          assets=(dist/*.deb dist/*.AppImage dist/SHA256SUMS)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" \
+              --verify-tag \
+              --title "Texti ${RELEASE_TAG#v}" \
+              --generate-notes
+          fi

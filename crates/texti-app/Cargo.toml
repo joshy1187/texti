@@ -1,0 +1,44 @@
+[package]
+name = "texti-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "texti"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+arboard = "3"
+rfd.workspace = true
+slint.workspace = true
+texti-core = { path = "../texti-core" }
+texti-model = { path = "../texti-model" }
+texti-settings = { path = "../texti-settings" }
+
+[build-dependencies]
+slint-build.workspace = true
+
+[package.metadata.deb]
+name = "texti"
+maintainer = "Clairos Group LLC <connect@clairos.ai>"
+copyright = "2026, The Clairos Group, LLC"
+license-file = ["../../LICENSE-MIT", "0"]
+changelog = "../../packaging/linux/changelog"
+depends = "$auto"
+section = "editors"
+priority = "optional"
+extended-description = "Texti is a focused Rust and Slint desktop text editor for source code, configuration, notes, and logs. It includes automatic syntax highlighting, safe file handling, session recovery, and keyboard-first editing workflows."
+assets = [
+    ["target/release/texti", "usr/bin/texti", "755"],
+    ["../../packaging/linux/texti.desktop", "usr/share/applications/texti.desktop", "644"],
+    ["../../packaging/linux/texti.svg", "usr/share/icons/hicolor/scalable/apps/texti.svg", "644"],
+    ["../../packaging/linux/copyright", "usr/share/doc/texti/copyright", "644"],
+    ["../../THIRD_PARTY_NOTICES.md", "usr/share/doc/texti/THIRD_PARTY_NOTICES.md", "644"],
+]

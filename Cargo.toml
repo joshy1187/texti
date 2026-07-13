@@ -1,0 +1,46 @@
+[workspace]
+members = [
+    "crates/texti-app",
+    "crates/texti-core",
+    "crates/texti-editor",
+    "crates/texti-fs",
+    "crates/texti-model",
+    "crates/texti-settings",
+    "crates/texti-syntax",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+version = "1.0.0"
+authors = ["The Clairos Group, LLC <connect@clairos.ai>"]
+description = "Linux-native Rust and Slint text editor"
+homepage = "https://clairos.ai"
+repository = "https://github.com/joshy1187/texti"
+
+[workspace.dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+directories = "6"
+encoding_rs = "0.8"
+ignore = "0.4"
+parking_lot = "0.12"
+rfd = { version = "0.15", default-features = true }
+ropey = "1.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+slint = { version = "1.17.1", default-features = true, features = ["unstable-winit-030"] }
+slint-build = "1.17.1"
+syntect = { version = "5", default-features = true }
+tempfile = "3"
+thiserror = "2"
+two-face = { version = "0.5.1", default-features = false, features = ["syntect-default-onig"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+walkdir = "2"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
+strip = "symbols"

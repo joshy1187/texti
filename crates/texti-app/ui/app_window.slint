@@ -1,0 +1,2206 @@
+import { AboutSlint, HorizontalBox, VerticalBox, LineEdit, ScrollView } from "std-widgets.slint";
+import "assets/fonts/DejaVuSansMono.ttf";
+
+export struct ExplorerUiRow {
+    path: string,
+    name: string,
+    display_path: string,
+    depth: int,
+    is_dir: bool,
+    selected: bool,
+    symlink: bool,
+}
+
+export struct TabUiRow {
+    id: int,
+    title: string,
+    dirty: bool,
+    active: bool,
+    readonly: bool,
+}
+
+export struct RecentUiRow {
+    path: string,
+    display: string,
+}
+
+export struct SearchUiRow {
+    index: int,
+    line: int,
+    column: int,
+    preview: string,
+}
+
+export struct CommandUiRow {
+    id: string,
+    title: string,
+    group: string,
+    shortcut: string,
+    selected: bool,
+}
+
+export struct CommandSettingsUiRow {
+    id: string,
+    title: string,
+    group: string,
+    shortcut: string,
+    visible: bool,
+    capturing: bool,
+}
+
+export struct MinimapUiRow {
+    line: int,
+    width: float,
+    color: color,
+}
+
+export struct EditorUiRow {
+    line_number: int,
+    y: length,
+    selected_x: length,
+    selected_width: length,
+}
+
+export struct EditorUiSegment {
+    x: length,
+    y: length,
+    text: string,
+    color: color,
+    bold: bool,
+    italic: bool,
+}
+
+export global Theme {
+    in-out property <color> bg_void: #07090E;
+    in-out property <color> bg_base: #0C0F15;
+    in-out property <color> bg_editor: #0F1218;
+    in-out property <color> bg_gutter: #11151D;
+    in-out property <color> bg_panel: #171B24;
+    in-out property <color> bg_hover: #222938;
+    in-out property <color> stroke: #323848;
+    in-out property <color> text_primary: #F3F0F7;
+    in-out property <color> text_secondary: #C7C1CF;
+    in-out property <color> text_muted: #8D8697;
+    in-out property <color> violet: #A55CFF;
+    in-out property <color> blue: #4FA7FF;
+    in-out property <color> red: #FF5F57;
+    in-out property <color> warning: #D3A24A;
+}
+
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.text_muted;
+    in property <string> tip: "";
+    callback clicked();
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: touch.has_hover ? Theme.bg_hover : transparent;
+
+    Image {
+        source: root.icon;
+        colorize: root.tint;
+        width: 15px;
+        height: 15px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.clicked(); }
+    }
+}
+
+component QuietButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> primary: false;
+    callback clicked();
+    height: 31px;
+    min-width: 74px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: primary ? Theme.violet : Theme.stroke;
+    background: primary ? #2A1C44 : (touch.has_hover ? Theme.bg_hover : Theme.bg_panel);
+
+    Text {
+        text: root.label;
+        color: Theme.text_primary;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.clicked(); }
+    }
+}
+
+component WorkspaceRow inherits Rectangle {
+    in property <ExplorerUiRow> entry;
+    callback activated(string);
+    height: 34px;
+    border-radius: 6px;
+    background: touch.has_hover || entry.selected ? Theme.bg_hover : transparent;
+
+    HorizontalBox {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 9px;
+
+        Image {
+            source: entry.is_dir ? @image-url("assets/icons/folder.svg") : @image-url("assets/icons/file.svg");
+            colorize: entry.is_dir ? Theme.blue : Theme.text_muted;
+            width: 17px;
+            height: 17px;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: entry.display_path;
+            color: entry.selected ? Theme.text_primary : Theme.text_secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.activated(entry.path); }
+    }
+}
+
+component RecentRow inherits Rectangle {
+    in property <RecentUiRow> entry;
+    callback activated(string);
+    height: 34px;
+    border-radius: 6px;
+    background: touch.has_hover ? Theme.bg_hover : transparent;
+
+    HorizontalBox {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 9px;
+
+        Image {
+            source: @image-url("assets/icons/recent.svg");
+            colorize: Theme.violet;
+            width: 17px;
+            height: 17px;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: entry.display;
+            color: Theme.text_secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.activated(entry.path); }
+    }
+}
+
+component SearchRow inherits Rectangle {
+    in property <SearchUiRow> entry;
+    callback activated(int);
+    height: 30px;
+    border-radius: 6px;
+    background: touch.has_hover ? Theme.bg_hover : transparent;
+
+    HorizontalBox {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 10px;
+
+        Text {
+            text: entry.line + ":" + entry.column;
+            color: Theme.violet;
+            font-size: 12px;
+            width: 74px;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: entry.preview;
+            color: Theme.text_secondary;
+            font-size: 12px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.activated(entry.index); }
+    }
+}
+
+component CommandRow inherits Rectangle {
+    in property <CommandUiRow> entry;
+    callback activated(string);
+    height: 38px;
+    border-radius: 5px;
+    background: entry.selected || touch.has_hover ? Theme.bg_hover : transparent;
+
+    HorizontalBox {
+        padding-left: 11px;
+        padding-right: 11px;
+        spacing: 10px;
+
+        VerticalBox {
+            spacing: 0px;
+            vertical-stretch: 1;
+            Text {
+                text: entry.title;
+                color: Theme.text_primary;
+                font-size: 13px;
+                vertical-alignment: bottom;
+                overflow: elide;
+            }
+            Text {
+                text: entry.group;
+                color: Theme.text_muted;
+                font-size: 10px;
+                vertical-alignment: top;
+                overflow: elide;
+            }
+        }
+
+        Text {
+            text: entry.shortcut;
+            color: Theme.text_muted;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.activated(entry.id); }
+    }
+}
+
+component SettingsRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> selected: false;
+    callback activated();
+    height: 38px;
+    border-radius: 6px;
+    background: root.selected || touch.has_hover ? Theme.bg_hover : transparent;
+
+    HorizontalBox {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 12px;
+
+        Text {
+            text: root.label;
+            color: root.selected ? Theme.text_primary : Theme.text_secondary;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+
+        Rectangle { horizontal-stretch: 1; background: transparent; }
+
+        Text {
+            text: root.value;
+            color: Theme.text_muted;
+            font-size: 12px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.activated(); }
+    }
+}
+
+component ToggleSetting inherits Rectangle {
+    in property <string> label;
+    in property <bool> checked;
+    callback toggled(bool);
+    height: 38px;
+    border-radius: 5px;
+    background: touch.has_hover ? Theme.bg_hover : transparent;
+
+    Text {
+        x: 10px;
+        width: parent.width - 64px;
+        height: parent.height;
+        text: root.label;
+        color: Theme.text_secondary;
+        font-size: 13px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Rectangle {
+        width: 34px;
+        height: 18px;
+        x: parent.width - self.width - 10px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 9px;
+        border-width: 1px;
+        border-color: root.checked ? Theme.violet : Theme.stroke;
+        background: root.checked ? #5A3488 : Theme.bg_base;
+
+        Rectangle {
+            width: 12px;
+            height: 12px;
+            x: root.checked ? parent.width - self.width - 3px : 3px;
+            y: 3px;
+            border-radius: 6px;
+            background: root.checked ? Theme.text_primary : Theme.text_muted;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.toggled(!root.checked); }
+    }
+}
+
+component CommandSettingsRow inherits Rectangle {
+    in property <CommandSettingsUiRow> entry;
+    callback visibility_changed(string, bool);
+    callback capture_requested(string);
+    callback clear_requested(string);
+    height: 56px;
+    border-radius: 6px;
+    background: row-touch.has-hover ? Theme.bg_hover : transparent;
+
+    Text {
+        x: 10px;
+        y: 9px;
+        width: parent.width - 278px;
+        height: 18px;
+        text: root.entry.title;
+        color: Theme.text_primary;
+        font-size: 12px;
+        overflow: elide;
+    }
+
+    Text {
+        x: 10px;
+        y: 29px;
+        width: parent.width - 278px;
+        height: 15px;
+        text: root.entry.group;
+        color: Theme.text_muted;
+        font-size: 10px;
+        overflow: elide;
+    }
+
+    Rectangle {
+        x: parent.width - 258px;
+        y: 12px;
+        width: 142px;
+        height: 32px;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: root.entry.capturing ? Theme.violet : Theme.stroke;
+        background: shortcut-touch.has-hover ? Theme.bg_hover : Theme.bg_base;
+
+        Text {
+            text: root.entry.capturing ? "Press shortcut…" : (root.entry.shortcut == "" ? "Not set" : root.entry.shortcut);
+            color: root.entry.capturing ? Theme.text_primary : Theme.text_secondary;
+            font-size: 11px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        shortcut-touch := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.capture_requested(root.entry.id); }
+        }
+    }
+
+    Rectangle {
+        x: parent.width - 108px;
+        y: 12px;
+        width: 46px;
+        height: 32px;
+        border-radius: 6px;
+        background: clear-touch.has-hover && root.entry.shortcut != "" ? Theme.bg_hover : transparent;
+        opacity: root.entry.shortcut == "" ? 0.4 : 1;
+
+        Text {
+            text: "Clear";
+            color: Theme.text_muted;
+            font-size: 10px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        clear-touch := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            enabled: root.entry.shortcut != "";
+            clicked => { root.clear_requested(root.entry.id); }
+        }
+    }
+
+    Rectangle {
+        x: parent.width - 50px;
+        y: 19px;
+        width: 34px;
+        height: 18px;
+        border-radius: 9px;
+        border-width: 1px;
+        border-color: root.entry.visible ? Theme.violet : Theme.stroke;
+        background: root.entry.visible ? #5A3488 : Theme.bg_base;
+
+        Rectangle {
+            width: 12px;
+            height: 12px;
+            x: root.entry.visible ? parent.width - self.width - 3px : 3px;
+            y: 3px;
+            border-radius: 6px;
+            background: root.entry.visible ? Theme.text_primary : Theme.text_muted;
+        }
+
+    }
+
+    row-touch := TouchArea {
+        width: parent.width - 270px;
+        height: parent.height;
+        enabled: false;
+    }
+
+    visibility-touch := TouchArea {
+        x: parent.width - 60px;
+        y: 0px;
+        width: 60px;
+        height: parent.height;
+        mouse-cursor: pointer;
+        clicked => { root.visibility_changed(root.entry.id, !root.entry.visible); }
+    }
+}
+
+component ChoiceButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked();
+    height: 28px;
+    min-width: 58px;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: selected ? Theme.violet : Theme.stroke;
+    background: selected ? #5A348844 : (touch.has_hover ? Theme.bg_hover : Theme.bg_base);
+
+    Text {
+        text: root.label;
+        color: selected ? Theme.text_primary : Theme.text_secondary;
+        font-size: 11px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => { root.clicked(); }
+    }
+}
+
+component StepperSetting inherits Rectangle {
+    in property <string> label;
+    in property <int> value;
+    in property <int> minimum;
+    in property <int> maximum;
+    in property <int> step: 1;
+    callback changed(int);
+    height: 38px;
+
+    Text {
+        x: 10px;
+        width: parent.width - 128px;
+        height: parent.height;
+        text: root.label;
+        color: Theme.text_secondary;
+        font-size: 13px;
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        width: 104px;
+        height: 28px;
+        x: parent.width - self.width - 8px;
+        y: 5px;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: Theme.stroke;
+        background: Theme.bg_base;
+
+        Text {
+            x: 29px;
+            width: 46px;
+            height: parent.height;
+            text: root.value;
+            color: Theme.text_primary;
+            font-size: 12px;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        Rectangle {
+            width: 28px;
+            height: parent.height;
+            background: minus-touch.has-hover ? Theme.bg_hover : transparent;
+            Text { text: "-"; color: Theme.text_secondary; font-size: 14px; horizontal-alignment: center; vertical-alignment: center; }
+            minus-touch := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.value > root.minimum;
+                clicked => { root.changed(max(root.minimum, root.value - root.step)); }
+            }
+        }
+
+        Rectangle {
+            width: 28px;
+            height: parent.height;
+            x: parent.width - self.width;
+            background: plus-touch.has-hover ? Theme.bg_hover : transparent;
+            Text { text: "+"; color: Theme.text_secondary; font-size: 14px; horizontal-alignment: center; vertical-alignment: center; }
+            plus-touch := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                enabled: root.value < root.maximum;
+                clicked => { root.changed(min(root.maximum, root.value + root.step)); }
+            }
+        }
+    }
+}
+
+component FileMenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback activated();
+    height: 36px;
+    border-radius: 6px;
+    background: root.enabled && touch.has_hover ? Theme.bg_hover : transparent;
+    opacity: root.enabled ? 1 : 0.42;
+
+    HorizontalBox {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 9px;
+
+        Image {
+            source: root.icon;
+            colorize: Theme.text_secondary;
+            width: 17px;
+            height: 17px;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: root.label;
+            color: Theme.text_primary;
+            font-size: 13px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        clicked => { root.activated(); }
+    }
+}
+
+component ContextMenuRow inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <string> shortcut: "";
+    in property <bool> enabled: true;
+    callback activated();
+    height: 32px;
+    border-radius: 5px;
+    background: root.enabled && touch.has-hover ? Theme.bg_hover : transparent;
+    opacity: root.enabled ? 1 : 0.42;
+
+    Image {
+        source: root.icon;
+        colorize: Theme.text_secondary;
+        width: 15px;
+        height: 15px;
+        x: 9px;
+        y: (parent.height - self.height) / 2;
+    }
+
+    Text {
+        text: root.label;
+        color: Theme.text_primary;
+        font-size: 12px;
+        x: 34px;
+        width: parent.width - 105px;
+        height: parent.height;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Text {
+        text: root.shortcut;
+        color: Theme.text_muted;
+        font-size: 10px;
+        x: parent.width - 72px;
+        width: 62px;
+        height: parent.height;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        clicked => { root.activated(); }
+    }
+}
+
+component TabButton inherits Rectangle {
+    in property <TabUiRow> tab;
+    in property <length> tab_width: 140px;
+    callback activated(int);
+    callback close_requested(int);
+    width: root.tab_width;
+    height: 32px;
+    border-radius: 5px;
+    border-width: 1px;
+    border-color: tab.active ? Theme.stroke : transparent;
+    background: tab.active ? Theme.bg_editor : (touch.has_hover ? Theme.bg_hover : transparent);
+
+    if tab.active: Rectangle {
+        height: 2px;
+        width: parent.width - 12px;
+        x: 6px;
+        y: parent.height - self.height;
+        border-radius: 1px;
+        background: Theme.violet;
+    }
+
+    Text {
+        x: 10px;
+        width: parent.width - 50px - (tab.readonly ? 16px : 0px);
+        height: parent.height;
+        text: tab.title;
+        color: tab.active ? Theme.text_primary : Theme.text_secondary;
+        font-size: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    if tab.readonly: Image {
+        source: @image-url("assets/icons/readonly.svg");
+        colorize: Theme.warning;
+        width: 13px;
+        height: 13px;
+        x: parent.width - 42px;
+        y: (parent.height - self.height) / 2;
+    }
+
+    if tab.dirty && !(touch.has-hover || tab.active): Rectangle {
+        width: 7px;
+        height: 7px;
+        x: parent.width - self.width - 11px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 4px;
+        background: Theme.violet;
+    }
+
+    if touch.has-hover || tab.active: Rectangle {
+        width: 22px;
+        height: 22px;
+        x: parent.width - self.width - 4px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 4px;
+        background: close-touch.has-hover ? Theme.bg_hover : transparent;
+
+        Image {
+            source: @image-url("assets/icons/close-file.svg");
+            colorize: tab.dirty ? Theme.violet : Theme.text_muted;
+            width: 12px;
+            height: 12px;
+            x: 5px;
+            y: 5px;
+        }
+
+        close-touch := TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => { root.close_requested(tab.id); }
+        }
+    }
+
+    touch := TouchArea {
+        width: parent.width - 26px;
+        height: parent.height;
+        clicked => { root.activated(tab.id); }
+        pointer-event(event) => {
+            if event.button == PointerEventButton.middle && event.kind == PointerEventKind.down {
+                root.close_requested(tab.id);
+            }
+        }
+    }
+}
+
+component OverlayPanel inherits Rectangle {
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.stroke;
+    background: Theme.bg_panel;
+    drop-shadow-blur: 24px;
+    drop-shadow-color: #00000080;
+}
+
+component OverlayLineEdit inherits LineEdit {
+    callback dismiss_requested();
+
+    key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.dismiss_requested();
+            return accept;
+        }
+        return reject;
+    }
+}
+
+export component AppWindow inherits Window {
+    no-frame: true;
+    resize-border-width: 16px;
+    title: root.window_title;
+    preferred-width: 1280px;
+    preferred-height: 820px;
+    min-width: 820px;
+    min-height: 520px;
+    max-width: 16777215px;
+    max-height: 16777215px;
+    background: Theme.bg_void;
+    forward-focus: shortcut-scope;
+
+    in property <[EditorUiRow]> editor_rows: [];
+    in property <[EditorUiSegment]> editor_segments: [];
+    in property <length> editor_content_width: 640px;
+    in property <length> editor_content_height: 24px;
+    in property <length> editor_caret_x: 12px;
+    in property <length> editor_caret_y: 0px;
+    in property <length> editor_caret_height: 17px;
+    in property <bool> editor_caret_visible: true;
+    in property <[ExplorerUiRow]> explorer_rows: [];
+    in property <[TabUiRow]> tabs: [];
+    in property <[RecentUiRow]> recent_rows: [];
+    in property <[SearchUiRow]> search_rows: [];
+    in property <[CommandUiRow]> command_rows: [];
+    in property <[CommandSettingsUiRow]> command_settings_rows: [];
+    in property <string> command_selected_id: "";
+    in property <[MinimapUiRow]> minimap_rows: [];
+    in property <int> minimap_total_lines: 1;
+    in property <string> status_text: "Plain Text | UTF-8 | Ln 1, Col 1 | Saved";
+    in property <string> message_text: "Ready";
+    in property <string> selected_path_text: "";
+    in property <string> workspace_root_text: "";
+    in property <string> window_title: "Texti";
+    in property <string> app_version: "1.0.0";
+    in property <bool> readonly: false;
+    in property <bool> show_line_numbers: true;
+    in property <bool> word_wrap: false;
+    in property <bool> show_minimap: false;
+    in property <bool> show_whitespace: false;
+    in property <int> editor_font_size: 14;
+    out property <length> editor_cell_width: editor_font_probe.preferred-width / 64;
+    in property <int> tab_size: 4;
+    in property <bool> insert_spaces: true;
+    in property <bool> status_hints: true;
+    in property <bool> syntax_highlighting: true;
+    in property <bool> recovery_autosave: true;
+    in property <bool> show_hidden_files: false;
+    in property <bool> confirm_trash: true;
+    in property <string> syntax_mode_label: "Auto Detect";
+    in-out property <string> command_text;
+    in-out property <string> search_text;
+    in-out property <string> replace_text;
+    in-out property <string> goto_text;
+    in-out property <string> workspace_query;
+    in-out property <string> command_query;
+    in-out property <string> command_settings_query;
+    in-out property <string> shortcut_capture_id: "";
+    in property <string> shortcut_error: "";
+
+    in-out property <bool> find_visible: false;
+    in-out property <bool> replace_visible: false;
+    in-out property <bool> goto_visible: false;
+    in-out property <bool> workspace_visible: false;
+    in-out property <bool> recent_visible: false;
+    in-out property <bool> settings_visible: false;
+    in-out property <bool> about_visible: false;
+    in-out property <bool> prompt_visible: false;
+    in-out property <bool> trash_confirm_visible: false;
+    in-out property <bool> app_menu_visible: false;
+    in-out property <bool> context_menu_visible: false;
+    in-out property <bool> command_palette_visible: false;
+    in-out property <bool> dirty_decision_visible: false;
+    in-out property <bool> conflict_visible: false;
+    in property <int> dirty_decision_tab_id: -1;
+    in property <string> dirty_decision_title: "Untitled";
+    in property <int> conflict_tab_id: -1;
+    in property <string> conflict_path: "";
+    in-out property <length> editor_viewport_x: 0px;
+    in-out property <length> editor_viewport_y: 0px;
+    in-out property <length> tab_viewport_x: 0px;
+    in-out property <length> context_menu_x: 8px;
+    in-out property <length> context_menu_y: 48px;
+    in-out property <bool> autoscroll_active: false;
+    in-out property <float> autoscroll_marker_x: 0;
+    in-out property <float> autoscroll_marker_y: 0;
+    property <string> prompt_mode: "";
+    property <string> prompt_title: "";
+    property <string> prompt_placeholder: "";
+    property <string> settings_section: "Editor";
+    private property <string> editor_font_family: "DejaVu Sans Mono";
+    private property <length> editor_viewport_max_y: max(0px, root.editor_content_height - editor_scroll.visible-height);
+    private property <length> tab_display_width: max(96px, min(176px, (root.width - 150px) / max(1, root.tabs.length)));
+    private property <bool> blocking_modal_visible: root.dirty_decision_visible || root.conflict_visible;
+
+    callback request_minimize();
+    callback request_toggle_maximize();
+    callback request_begin_window_drag();
+    callback request_close();
+    callback request_toggle_focus_mode();
+    callback request_new();
+    callback request_open_file();
+    callback request_open_folder();
+    callback request_save();
+    callback request_save_as();
+    callback request_reload();
+    callback request_undo();
+    callback request_redo();
+    callback request_copy();
+    callback request_cut();
+    callback request_paste();
+    callback request_select_all();
+    callback request_close_tab();
+    callback request_close_tab_by_id(int);
+    callback request_next_tab();
+    callback request_previous_tab();
+    callback request_toggle_hidden();
+    callback request_toggle_line_numbers();
+    callback request_toggle_word_wrap();
+    callback request_toggle_status_hints();
+    callback request_toggle_syntax_highlighting();
+    callback request_toggle_recovery_autosave();
+    callback request_toggle_confirm_trash();
+    callback request_set_font_size(int);
+    callback request_set_tab_size(int);
+    callback request_set_insert_spaces(bool);
+    callback request_set_show_minimap(bool);
+    callback request_set_show_whitespace(bool);
+    callback request_set_syntax_mode(string);
+    callback request_create_file(string);
+    callback request_create_folder(string);
+    callback request_rename(string);
+    callback request_trash_confirmed(bool);
+    callback request_cancel_autoscroll();
+    callback explorer_activated(string);
+    callback tab_activated(int);
+    callback recent_activated(string);
+    callback text_changed(string);
+    callback editor_pointer_down(float, float, bool);
+    callback editor_pointer_drag(float, float);
+    callback search_requested(string);
+    callback search_next_requested(string);
+    callback search_previous_requested(string);
+    callback search_result_activated(int);
+    callback replace_next_requested(string, string);
+    callback replace_all_requested(string, string);
+    callback goto_line_requested(string);
+    callback workspace_query_changed(string);
+    callback command_query_changed(string);
+    callback command_activated(string);
+    callback command_settings_query_changed(string);
+    callback command_visibility_changed(string, bool);
+    callback shortcut_capture_requested(string);
+    callback shortcut_clear_requested(string);
+    callback command_customizations_reset();
+    callback minimap_scroll_requested(float);
+    callback dirty_decision(int, string);
+    callback conflict_decision(int, string);
+
+    public function close_overlays() {
+        root.autoscroll_active = false;
+        root.request_cancel_autoscroll();
+        root.find_visible = false;
+        root.replace_visible = false;
+        root.goto_visible = false;
+        root.workspace_visible = false;
+        root.recent_visible = false;
+        root.settings_visible = false;
+        root.about_visible = false;
+        root.prompt_visible = false;
+        root.trash_confirm_visible = false;
+        root.app_menu_visible = false;
+        root.context_menu_visible = false;
+        root.command_palette_visible = false;
+        root.dirty_decision_visible = false;
+        root.conflict_visible = false;
+        root.shortcut_capture_id = "";
+        shortcut-scope.focus();
+    }
+
+    public function dismiss_active_overlay() {
+        if root.dirty_decision_visible {
+            root.dirty_decision(root.dirty_decision_tab_id, "cancel");
+            root.dirty_decision_visible = false;
+            shortcut-scope.focus();
+        } else if root.conflict_visible {
+            root.conflict_decision(root.conflict_tab_id, "cancel");
+            root.conflict_visible = false;
+            shortcut-scope.focus();
+        } else {
+            root.close_overlays();
+        }
+    }
+
+    function toggle_app_menu() {
+        if root.app_menu_visible {
+            root.app_menu_visible = false;
+        } else {
+            root.close_overlays();
+            root.app_menu_visible = true;
+        }
+    }
+
+    public function show_editor_context_menu(x: float, y: float) {
+        root.close_overlays();
+        root.context_menu_x = min(root.width - 252px, max(8px, x * 1px));
+        root.context_menu_y = min(root.height - 324px, max(8px, y * 1px));
+        root.context_menu_visible = true;
+    }
+
+    public function show_find() {
+        root.close_overlays();
+        root.find_visible = true;
+    }
+
+    public function show_command_palette() {
+        root.close_overlays();
+        root.command_query = "";
+        root.command_query_changed("");
+        root.command_palette_visible = true;
+    }
+
+    public function select_byte_range(start: int, end: int) {
+    }
+
+    public function scroll_editor_by(delta: float) {
+        root.editor_viewport_y = min(root.editor_viewport_max_y, max(0px, root.editor_viewport_y + delta * 1px));
+    }
+
+    public function set_editor_viewport_y(y: float) {
+        root.editor_viewport_y = min(root.editor_viewport_max_y, max(0px, y * 1px));
+    }
+
+    public function show_new_file_prompt() {
+        root.show_prompt("new-file", "New File", "file name");
+    }
+
+    public function show_new_folder_prompt() {
+        root.show_prompt("new-folder", "New Folder", "folder name");
+    }
+
+    public function show_rename_prompt() {
+        root.show_prompt("rename", "Rename Selected Item", "new name");
+    }
+
+    public function show_trash_prompt() {
+        root.close_overlays();
+        if root.confirm_trash {
+            root.trash_confirm_visible = true;
+        } else {
+            root.request_trash_confirmed(true);
+        }
+    }
+
+    public function show_replace() {
+        root.close_overlays();
+        root.replace_visible = true;
+    }
+
+    public function show_goto() {
+        root.close_overlays();
+        root.goto_visible = true;
+    }
+
+    public function show_workspace() {
+        root.close_overlays();
+        root.workspace_query = "";
+        root.workspace_query_changed("");
+        root.workspace_visible = true;
+    }
+
+    public function show_recent() {
+        root.close_overlays();
+        root.recent_visible = true;
+    }
+
+    function show_prompt(mode: string, title: string, placeholder: string) {
+        root.close_overlays();
+        root.prompt_mode = mode;
+        root.prompt_title = title;
+        root.prompt_placeholder = placeholder;
+        root.command_text = "";
+        root.prompt_visible = true;
+    }
+
+    editor_font_probe := Text {
+        visible: false;
+        text: "0000000000000000000000000000000000000000000000000000000000000000";
+        font-family: root.editor_font_family;
+        font-size: root.editor_font_size * 1px;
+        font-weight: 400;
+    }
+
+    shortcut-scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-click: true;
+        init => { shortcut-scope.focus(); }
+
+        KeyBinding {
+            keys: @keys(Escape);
+            activated => { root.dismiss_active_overlay(); }
+        }
+
+        VerticalBox {
+            spacing: 0px;
+
+            Rectangle {
+                height: 44px;
+                background: Theme.bg_base;
+                border-width: 0px;
+
+                IconButton {
+                    x: 8px;
+                    y: 10px;
+                    icon: @image-url("assets/icons/window-minimize.svg");
+                    tint: Theme.violet;
+                    clicked => { root.request_minimize(); }
+                }
+
+                IconButton {
+                    x: 36px;
+                    y: 10px;
+                    icon: @image-url("assets/icons/window-maximize.svg");
+                    tint: Theme.blue;
+                    clicked => { root.request_toggle_maximize(); }
+                }
+
+                IconButton {
+                    x: 64px;
+                    y: 10px;
+                    icon: @image-url("assets/icons/window-close.svg");
+                    tint: Theme.red;
+                    clicked => { root.request_close(); }
+                }
+
+                Rectangle {
+                    x: 92px;
+                    y: 0px;
+                    width: parent.width - 128px;
+                    height: parent.height;
+                    background: transparent;
+                    clip: true;
+
+                    tab-flick := Flickable {
+                        width: parent.width;
+                        height: 36px;
+                        y: 4px;
+                        viewport-x <=> root.tab_viewport_x;
+                        viewport-width: max(self.width, root.tabs.length * (root.tab_display_width + 4px));
+                        viewport-height: self.height;
+
+                        HorizontalBox {
+                            x: 0px;
+                            y: 2px;
+                            width: tab-flick.viewport-width;
+                            height: 32px;
+                            spacing: 4px;
+
+                            for tab[index] in root.tabs: TabButton {
+                                tab: tab;
+                                tab_width: root.tab_display_width;
+                                activated(id) => {
+                                    root.close_overlays();
+                                    root.tab_activated(id);
+                                }
+                                close_requested(id) => {
+                                    root.close_overlays();
+                                    root.request_close_tab_by_id(id);
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: transparent;
+                                TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    pointer-event(event) => {
+                                        if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                            root.request_begin_window_drag();
+                                        }
+                                    }
+                                    double-clicked => { root.request_toggle_maximize(); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                IconButton {
+                    x: parent.width - 32px;
+                    y: 10px;
+                    icon: @image-url("assets/icons/menu.svg");
+                    tint: Theme.text_secondary;
+                    clicked => { root.toggle_app_menu(); }
+                }
+            }
+
+            Rectangle {
+                    background: Theme.bg_editor;
+
+                    HorizontalBox {
+                        spacing: 0px;
+
+                        if root.show_line_numbers: Rectangle {
+                            width: 58px;
+                            background: Theme.bg_gutter;
+                            clip: true;
+
+                            for row[index] in root.editor_rows: Text {
+                                x: 0px;
+                                y: row.y - root.editor_viewport_y;
+                                width: parent.width - 8px;
+                                height: (root.editor_font_size + 3) * 1px;
+                                text: row.line_number <= 0 ? "" : row.line_number;
+                                font-family: root.editor_font_family;
+                                font-size: root.editor_font_size * 1px;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                                color: Theme.text_muted;
+                            }
+                        }
+
+                        Rectangle {
+                            background: Theme.bg_editor;
+
+                            editor_scroll := ScrollView {
+                                viewport-x <=> root.editor_viewport_x;
+                                viewport-y <=> root.editor_viewport_y;
+                                viewport-width: root.word_wrap ? parent.width : max(parent.width, root.editor_content_width);
+                                viewport-height: max(parent.height, root.editor_content_height);
+                                vertical-scrollbar-policy: ScrollBarPolicy.always-on;
+                                horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
+
+                                editor_canvas := Rectangle {
+                                    width: root.word_wrap ? parent.width : max(parent.width, root.editor_content_width);
+                                    height: max(parent.height, root.editor_content_height);
+                                    background: Theme.bg_editor;
+                                    clip: true;
+
+                                    for row[index] in root.editor_rows: Rectangle {
+                                        x: row.selected_x;
+                                        y: row.y + 1px;
+                                        width: row.selected_width;
+                                        height: root.editor_font_size * 1px + 2px;
+                                        border-radius: 3px;
+                                        background: row.selected_width > 0px ? #704DB599 : transparent;
+                                    }
+
+                                    for segment[index] in root.editor_segments: Text {
+                                        x: segment.x;
+                                        y: segment.y;
+                                        text: segment.text;
+                                        color: segment.color;
+                                        font-family: root.editor_font_family;
+                                        font-size: root.editor_font_size * 1px;
+                                        font-weight: segment.bold ? 700 : 400;
+                                        font-italic: segment.italic;
+                                        height: (root.editor_font_size + 3) * 1px;
+                                        vertical-alignment: center;
+                                    }
+
+                                    if root.editor_caret_visible: Rectangle {
+                                        x: root.editor_caret_x;
+                                        y: root.editor_caret_y + 2px;
+                                        width: 2px;
+                                        height: root.editor_caret_height - 3px;
+                                        border-radius: 1px;
+                                        background: Theme.blue;
+                                    }
+
+                                    TouchArea {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        mouse-cursor: text;
+                                        pointer-event(event) => {
+                                            if event.button == PointerEventButton.left && event.kind == PointerEventKind.down {
+                                                root.editor_pointer_down((self.mouse-x + root.editor_viewport_x) / 1px, (self.mouse-y + root.editor_viewport_y) / 1px, event.modifiers.shift);
+                                            }
+                                        }
+                                        moved => {
+                                            if self.pressed {
+                                                root.editor_pointer_drag((self.mouse-x + root.editor_viewport_x) / 1px, (self.mouse-y + root.editor_viewport_y) / 1px);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if root.autoscroll_active: Rectangle {
+                                width: 28px;
+                                height: 28px;
+                                x: min(max(root.autoscroll_marker_x * 1px - self.width / 2, 6px), parent.width - self.width - 6px);
+                                y: min(max(root.autoscroll_marker_y * 1px - self.height / 2, 6px), parent.height - self.height - 6px);
+                                border-radius: 14px;
+                                border-width: 1px;
+                                border-color: Theme.violet;
+                                background: #171B24CC;
+                                drop-shadow-blur: 12px;
+                                drop-shadow-color: #00000066;
+
+                                Rectangle {
+                                    width: 2px;
+                                    height: 14px;
+                                    x: 13px;
+                                    y: 7px;
+                                    border-radius: 1px;
+                                    background: Theme.blue;
+                                }
+
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    x: 11px;
+                                    y: 4px;
+                                    border-radius: 3px;
+                                    background: Theme.violet;
+                                }
+
+                                Rectangle {
+                                    width: 6px;
+                                    height: 6px;
+                                    x: 11px;
+                                    y: 18px;
+                                    border-radius: 3px;
+                                    background: Theme.violet;
+                                }
+                            }
+                        }
+
+                        if root.show_minimap: Rectangle {
+                            width: 72px;
+                            background: Theme.bg_gutter;
+                            border-width: 0px;
+                            clip: true;
+
+                            for sample[index] in root.minimap_rows: Rectangle {
+                                x: 6px;
+                                y: parent.height * max(0, sample.line - 1) / max(1, root.minimap_total_lines);
+                                width: max(3px, (parent.width - 12px) * sample.width);
+                                height: 2px;
+                                border-radius: 1px;
+                                background: sample.color;
+                            }
+
+                            Rectangle {
+                                x: 2px;
+                                width: parent.width - 4px;
+                                height: max(20px, parent.height * editor_scroll.visible-height / max(editor_scroll.visible-height, root.editor_content_height));
+                                y: root.editor_content_height <= editor_scroll.visible-height
+                                    ? 0px
+                                    : (parent.height - self.height) * root.editor_viewport_y / (root.editor_content_height - editor_scroll.visible-height);
+                                border-radius: 3px;
+                                border-width: 1px;
+                                border-color: Theme.blue;
+                                background: #4FA7FF20;
+                            }
+
+                            minimap-touch := TouchArea {
+                                width: parent.width;
+                                height: parent.height;
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.minimap_scroll_requested(min(1, max(0, self.mouse-y / self.height)));
+                                }
+                                moved => {
+                                    if self.pressed {
+                                        root.minimap_scroll_requested(min(1, max(0, self.mouse-y / self.height)));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            if root.status_hints: Rectangle {
+                height: 24px;
+                background: Theme.bg_base;
+
+                HorizontalBox {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    spacing: 10px;
+
+                    Text {
+                        text: root.status_text;
+                        color: Theme.text_muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+
+                    Text {
+                        text: root.message_text;
+                        color: Theme.text_muted;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+
+        if root.app_menu_visible || root.context_menu_visible: Rectangle {
+            background: transparent;
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+                clicked => {
+                    root.app_menu_visible = false;
+                    root.context_menu_visible = false;
+                    shortcut-scope.focus();
+                }
+            }
+        }
+
+        if root.context_menu_visible: OverlayPanel {
+            width: 244px;
+            height: 316px;
+            x: root.context_menu_x;
+            y: root.context_menu_y;
+
+            VerticalBox {
+                padding: 6px;
+                spacing: 0px;
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/undo.svg");
+                    label: "Undo";
+                    activated => { root.context_menu_visible = false; root.request_undo(); }
+                }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/redo.svg");
+                    label: "Redo";
+                    activated => { root.context_menu_visible = false; root.request_redo(); }
+                }
+                Rectangle { height: 8px; Rectangle { y: 4px; width: parent.width; height: 1px; background: Theme.stroke; } }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/cut.svg");
+                    label: "Cut";
+                    enabled: !root.readonly;
+                    activated => { root.context_menu_visible = false; root.request_cut(); }
+                }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/copy.svg");
+                    label: "Copy";
+                    activated => { root.context_menu_visible = false; root.request_copy(); }
+                }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/paste.svg");
+                    label: "Paste";
+                    enabled: !root.readonly;
+                    activated => { root.context_menu_visible = false; root.request_paste(); }
+                }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/select-all.svg");
+                    label: "Select All";
+                    activated => { root.context_menu_visible = false; root.request_select_all(); }
+                }
+                Rectangle { height: 8px; Rectangle { y: 4px; width: parent.width; height: 1px; background: Theme.stroke; } }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/search.svg");
+                    label: "Find";
+                    activated => { root.show_find(); }
+                }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/replace.svg");
+                    label: "Replace";
+                    activated => { root.show_replace(); }
+                }
+                ContextMenuRow {
+                    icon: @image-url("assets/icons/keyboard.svg");
+                    label: "Command Palette";
+                    activated => { root.show_command_palette(); }
+                }
+            }
+        }
+
+        if root.app_menu_visible: OverlayPanel {
+            width: 220px;
+            height: 361px;
+            x: parent.width - self.width - 14px;
+            y: 48px;
+
+            VerticalBox {
+                padding: 7px;
+                spacing: 3px;
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/new-file.svg");
+                    label: "New";
+                    activated => {
+                        root.close_overlays();
+                        root.request_new();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/open-file.svg");
+                    label: "Open";
+                    activated => {
+                        root.close_overlays();
+                        root.request_open_file();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/open-folder.svg");
+                    label: "Open Folder";
+                    activated => {
+                        root.close_overlays();
+                        root.request_open_folder();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/save.svg");
+                    label: "Save";
+                    activated => {
+                        root.close_overlays();
+                        root.request_save();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/save-as.svg");
+                    label: "Save As";
+                    activated => {
+                        root.close_overlays();
+                        root.request_save_as();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/recent.svg");
+                    label: "Recent";
+                    activated => {
+                        root.show_recent();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/keyboard.svg");
+                    label: "Command Palette";
+                    activated => {
+                        root.show_command_palette();
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/settings.svg");
+                    label: "Settings";
+                    activated => {
+                        root.close_overlays();
+                        root.settings_visible = true;
+                    }
+                }
+
+                FileMenuRow {
+                    icon: @image-url("assets/icons/texti-mark.svg");
+                    label: "About Texti";
+                    activated => {
+                        root.close_overlays();
+                        root.about_visible = true;
+                    }
+                }
+            }
+        }
+
+        if root.command_palette_visible: OverlayPanel {
+            width: min(parent.width - 64px, 680px);
+            height: min(parent.height - 96px, 500px);
+            x: (parent.width - self.width) / 2;
+            y: 52px;
+            init => { command-input.focus(); }
+
+            VerticalBox {
+                padding: 12px;
+                spacing: 9px;
+
+                command-input := OverlayLineEdit {
+                    text <=> root.command_query;
+                    placeholder-text: "Type a command";
+                    dismiss_requested => { root.dismiss_active_overlay(); }
+                    accepted => {
+                        if root.command_selected_id != "" {
+                            root.command_activated(root.command_selected_id);
+                            root.close_overlays();
+                        }
+                    }
+                    changed text => { root.command_query_changed(self.text); }
+                }
+
+                ScrollView {
+                    viewport-width: parent.width;
+                    viewport-height: parent.height;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                    VerticalBox {
+                        width: parent.width;
+                        spacing: 2px;
+                        for entry[index] in root.command_rows: CommandRow {
+                            entry: entry;
+                            activated(id) => {
+                                root.command_activated(id);
+                                root.close_overlays();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.find_visible: OverlayPanel {
+            width: 520px;
+            height: 260px;
+            x: parent.width - self.width - 24px;
+            y: 54px;
+            init => { find-input.focus(); }
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+
+                Text { text: "Find in file"; color: Theme.text_primary; font-size: 14px; font-weight: 650; }
+                HorizontalBox {
+                    spacing: 8px;
+                    find-input := OverlayLineEdit {
+                        text <=> root.search_text;
+                        placeholder-text: "search query";
+                        horizontal-stretch: 1;
+                        dismiss_requested => { root.dismiss_active_overlay(); }
+                        accepted => { root.search_next_requested(self.text); }
+                    }
+                    QuietButton { label: "Next"; primary: true; clicked => { root.search_next_requested(root.search_text); } }
+                    QuietButton { label: "Previous"; clicked => { root.search_previous_requested(root.search_text); } }
+                    QuietButton { label: "Close"; clicked => { root.close_overlays(); } }
+                }
+
+                ScrollView {
+                    viewport-width: parent.width;
+                    viewport-height: parent.height;
+                    VerticalBox {
+                        spacing: 2px;
+                        for entry[index] in root.search_rows: SearchRow {
+                            entry: entry;
+                            activated(result-index) => { root.search_result_activated(result-index); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.replace_visible: OverlayPanel {
+            width: 560px;
+            height: 210px;
+            x: parent.width - self.width - 24px;
+            y: 54px;
+            init => { replace-find-input.focus(); }
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+                Text { text: "Replace"; color: Theme.text_primary; font-size: 14px; font-weight: 650; }
+                replace-find-input := OverlayLineEdit {
+                    text <=> root.search_text;
+                    placeholder-text: "find";
+                    dismiss_requested => { root.dismiss_active_overlay(); }
+                }
+                OverlayLineEdit {
+                    text <=> root.replace_text;
+                    placeholder-text: "replace with";
+                    dismiss_requested => { root.dismiss_active_overlay(); }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    QuietButton { label: "Find"; clicked => { root.search_requested(root.search_text); } }
+                    QuietButton { label: "Replace"; primary: true; clicked => { root.replace_next_requested(root.search_text, root.replace_text); } }
+                    QuietButton { label: "All"; clicked => { root.replace_all_requested(root.search_text, root.replace_text); } }
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    QuietButton { label: "Close"; clicked => { root.close_overlays(); } }
+                }
+            }
+        }
+
+        if root.goto_visible: OverlayPanel {
+            width: 320px;
+            height: 126px;
+            x: parent.width - self.width - 24px;
+            y: 54px;
+            init => { goto-input.focus(); }
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+                Text { text: "Go to Line"; color: Theme.text_primary; font-size: 14px; font-weight: 650; }
+                HorizontalBox {
+                    spacing: 8px;
+                    goto-input := OverlayLineEdit {
+                        text <=> root.goto_text;
+                        placeholder-text: "line number";
+                        horizontal-stretch: 1;
+                        dismiss_requested => { root.dismiss_active_overlay(); }
+                        accepted => { root.goto_line_requested(self.text); }
+                    }
+                    QuietButton { label: "Go"; primary: true; clicked => { root.goto_line_requested(root.goto_text); } }
+                }
+            }
+        }
+
+        if root.workspace_visible: OverlayPanel {
+            width: min(parent.width - 80px, 720px);
+            height: min(parent.height - 120px, 560px);
+            x: (parent.width - self.width) / 2;
+            y: 58px;
+            init => { workspace-input.focus(); }
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+                Text { text: root.workspace_root_text == "" ? "Open Workspace" : root.workspace_root_text; color: Theme.text_primary; font-size: 14px; font-weight: 650; overflow: elide; }
+                workspace-input := OverlayLineEdit {
+                    text <=> root.workspace_query;
+                    placeholder-text: "Search files in folder...";
+                    dismiss_requested => { root.dismiss_active_overlay(); }
+                    accepted => { root.workspace_query_changed(self.text); }
+                    changed text => { root.workspace_query_changed(self.text); }
+                }
+                ScrollView {
+                    viewport-width: parent.width;
+                    viewport-height: parent.height;
+                    VerticalBox {
+                        spacing: 2px;
+                        for entry[index] in root.explorer_rows: WorkspaceRow {
+                            entry: entry;
+                            activated(path) => {
+                                root.explorer_activated(path);
+                                root.close_overlays();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.recent_visible: OverlayPanel {
+            width: min(parent.width - 80px, 700px);
+            height: min(parent.height - 140px, 520px);
+            x: (parent.width - self.width) / 2;
+            y: 72px;
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+                Text { text: "Recent Files"; color: Theme.text_primary; font-size: 14px; font-weight: 650; }
+                ScrollView {
+                    viewport-width: parent.width;
+                    viewport-height: parent.height;
+                    VerticalBox {
+                        spacing: 2px;
+                        for entry[index] in root.recent_rows: RecentRow {
+                            entry: entry;
+                            activated(path) => {
+                                root.recent_activated(path);
+                                root.close_overlays();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.prompt_visible: OverlayPanel {
+            width: 420px;
+            height: 142px;
+            x: (parent.width - self.width) / 2;
+            y: 72px;
+            init => { prompt-input.focus(); }
+
+            VerticalBox {
+                padding: 14px;
+                spacing: 10px;
+                Text { text: root.prompt_title; color: Theme.text_primary; font-size: 14px; font-weight: 650; }
+                prompt-input := OverlayLineEdit {
+                    text <=> root.command_text;
+                    placeholder-text: root.prompt_placeholder;
+                    dismiss_requested => { root.dismiss_active_overlay(); }
+                    accepted => {
+                        if root.prompt_mode == "new-file" {
+                            root.request_create_file(self.text);
+                        } else if root.prompt_mode == "new-folder" {
+                            root.request_create_folder(self.text);
+                        } else if root.prompt_mode == "rename" {
+                            root.request_rename(self.text);
+                        }
+                        root.close_overlays();
+                    }
+                }
+                HorizontalBox {
+                    spacing: 8px;
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    QuietButton { label: "Cancel"; clicked => { root.close_overlays(); } }
+                    QuietButton {
+                        label: "Apply";
+                        primary: true;
+                        clicked => {
+                            if root.prompt_mode == "new-file" {
+                                root.request_create_file(root.command_text);
+                            } else if root.prompt_mode == "new-folder" {
+                                root.request_create_folder(root.command_text);
+                            } else if root.prompt_mode == "rename" {
+                                root.request_rename(root.command_text);
+                            }
+                            root.close_overlays();
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.trash_confirm_visible: OverlayPanel {
+            width: 420px;
+            height: 136px;
+            x: (parent.width - self.width) / 2;
+            y: 76px;
+            VerticalBox {
+                padding: 14px;
+                spacing: 12px;
+                Text { text: "Move Selected Item to Trash"; color: Theme.text_primary; font-size: 14px; font-weight: 650; }
+                Text { text: root.selected_path_text; color: Theme.text_muted; font-size: 12px; overflow: elide; }
+                HorizontalBox {
+                    spacing: 8px;
+                    Rectangle { horizontal-stretch: 1; background: transparent; }
+                    QuietButton { label: "Cancel"; clicked => { root.close_overlays(); } }
+                    QuietButton { label: "Trash"; primary: true; clicked => { root.request_trash_confirmed(true); root.close_overlays(); } }
+                }
+            }
+        }
+
+        if root.settings_visible: OverlayPanel {
+            width: min(parent.width - 64px, 780px);
+            height: min(parent.height - 64px, 560px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            HorizontalBox {
+                padding: 16px;
+                spacing: 16px;
+
+                Rectangle {
+                    width: 180px;
+                    background: transparent;
+
+                    Text {
+                        x: 8px;
+                        y: 4px;
+                        width: parent.width - 16px;
+                        height: 26px;
+                        text: "Settings";
+                        color: Theme.text_primary;
+                        font-size: 16px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    SettingsRow {
+                        x: 0px;
+                        y: 42px;
+                        width: parent.width;
+                        label: "Editor";
+                        value: "";
+                        selected: root.settings_section == "Editor";
+                        activated => { root.settings_section = "Editor"; root.shortcut_capture_id = ""; }
+                    }
+                    SettingsRow {
+                        x: 0px;
+                        y: 84px;
+                        width: parent.width;
+                        label: "Files & Recovery";
+                        value: "";
+                        selected: root.settings_section == "Files & Recovery";
+                        activated => { root.settings_section = "Files & Recovery"; root.shortcut_capture_id = ""; }
+                    }
+                    SettingsRow {
+                        x: 0px;
+                        y: 126px;
+                        width: parent.width;
+                        label: "Command Palette";
+                        value: "";
+                        selected: root.settings_section == "Command Palette";
+                        activated => { root.settings_section = "Command Palette"; }
+                    }
+                    SettingsRow {
+                        x: 0px;
+                        y: parent.height - 38px;
+                        width: parent.width;
+                        label: "About Texti";
+                        value: "";
+                        activated => { root.close_overlays(); root.about_visible = true; }
+                    }
+                }
+
+                Rectangle { width: 1px; background: Theme.stroke; }
+
+                settings-content := Rectangle {
+                    horizontal-stretch: 1;
+                    background: transparent;
+
+                    Text {
+                        x: 8px;
+                        y: 3px;
+                        width: parent.width - 54px;
+                        height: 28px;
+                        text: root.settings_section;
+                        color: Theme.text_primary;
+                        font-size: 16px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                    IconButton {
+                        x: parent.width - 32px;
+                        y: 4px;
+                        icon: @image-url("assets/icons/close-file.svg");
+                        tint: Theme.text_muted;
+                        clicked => { root.close_overlays(); }
+                    }
+
+                    if root.settings_section == "Editor": ScrollView {
+                        x: 0px;
+                        y: 46px;
+                        width: parent.width;
+                        height: parent.height - 46px;
+                        viewport-width: self.width;
+                        viewport-height: 326px;
+                        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+
+                        VerticalBox {
+                            width: parent.width;
+                            padding-right: 8px;
+                            spacing: 6px;
+                            StepperSetting {
+                                height: 42px;
+                                label: "Font Size";
+                                value: root.editor_font_size;
+                                minimum: 12;
+                                maximum: 22;
+                                changed(value) => { root.request_set_font_size(value); }
+                            }
+                            Rectangle {
+                                height: 42px;
+                                Text { x: 10px; width: 100px; height: parent.height; text: "Tab Size"; color: Theme.text_secondary; font-size: 13px; vertical-alignment: center; }
+                                HorizontalBox {
+                                    x: parent.width - 194px;
+                                    y: 7px;
+                                    width: 186px;
+                                    height: 28px;
+                                    spacing: 4px;
+                                    ChoiceButton { label: "2"; selected: root.tab_size == 2; clicked => { root.request_set_tab_size(2); } }
+                                    ChoiceButton { label: "4"; selected: root.tab_size == 4; clicked => { root.request_set_tab_size(4); } }
+                                    ChoiceButton { label: "8"; selected: root.tab_size == 8; clicked => { root.request_set_tab_size(8); } }
+                                }
+                            }
+                            Rectangle {
+                                height: 42px;
+                                Text { x: 10px; width: 100px; height: parent.height; text: "Indent With"; color: Theme.text_secondary; font-size: 13px; vertical-alignment: center; }
+                                HorizontalBox {
+                                    x: parent.width - 130px;
+                                    y: 7px;
+                                    width: 122px;
+                                    height: 28px;
+                                    spacing: 4px;
+                                    ChoiceButton { label: "Spaces"; selected: root.insert_spaces; clicked => { root.request_set_insert_spaces(true); } }
+                                    ChoiceButton { label: "Tabs"; selected: !root.insert_spaces; clicked => { root.request_set_insert_spaces(false); } }
+                                }
+                            }
+                            ToggleSetting { height: 42px; label: "Line Numbers"; checked: root.show_line_numbers; toggled(value) => { root.request_toggle_line_numbers(); } }
+                            ToggleSetting { height: 42px; label: "Word Wrap"; checked: root.word_wrap; toggled(value) => { root.request_toggle_word_wrap(); } }
+                            ToggleSetting { height: 42px; label: "Minimap"; checked: root.show_minimap; toggled(value) => { root.request_set_show_minimap(value); } }
+                            ToggleSetting { height: 42px; label: "Show Whitespace"; checked: root.show_whitespace; toggled(value) => { root.request_set_show_whitespace(value); } }
+                        }
+                    }
+
+                    if root.settings_section == "Files & Recovery": VerticalBox {
+                        x: 0px;
+                        y: 46px;
+                        width: parent.width;
+                        spacing: 6px;
+                        padding-right: 8px;
+                        ToggleSetting { height: 42px; label: "Recovery"; checked: root.recovery_autosave; toggled(value) => { root.request_toggle_recovery_autosave(); } }
+                        ToggleSetting { height: 42px; label: "Show Hidden Files"; checked: root.show_hidden_files; toggled(value) => { root.request_toggle_hidden(); } }
+                        ToggleSetting { height: 42px; label: "Confirm Move to Trash"; checked: root.confirm_trash; toggled(value) => { root.request_toggle_confirm_trash(); } }
+                    }
+
+                    if root.settings_section == "Command Palette": Rectangle {
+                        x: 0px;
+                        y: 46px;
+                        width: parent.width;
+                        height: parent.height - 46px;
+                        background: transparent;
+
+                        command-settings-input := OverlayLineEdit {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: 36px;
+                            text <=> root.command_settings_query;
+                            placeholder-text: "Search commands";
+                            dismiss_requested => { root.shortcut_capture_id = ""; }
+                            changed text => { root.command_settings_query_changed(self.text); }
+                        }
+
+                        Text {
+                            x: parent.width - 258px;
+                            y: 42px;
+                            width: 142px;
+                            height: 18px;
+                            text: "Shortcut";
+                            color: Theme.text_muted;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            x: parent.width - 64px;
+                            y: 42px;
+                            width: 58px;
+                            height: 18px;
+                            text: "Palette";
+                            color: Theme.text_muted;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        ScrollView {
+                            x: 0px;
+                            y: 64px;
+                            width: parent.width;
+                            height: parent.height - 126px;
+                            viewport-width: self.width;
+                            viewport-height: max(self.height, root.command_settings_rows.length * 58px);
+                            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+
+                            VerticalBox {
+                                width: parent.width;
+                                padding-right: 8px;
+                                spacing: 2px;
+                                for entry[index] in root.command_settings_rows: CommandSettingsRow {
+                                    entry: entry;
+                                    visibility_changed(id, visible) => { root.command_visibility_changed(id, visible); }
+                                    capture_requested(id) => { root.shortcut_capture_requested(id); }
+                                    clear_requested(id) => { root.shortcut_clear_requested(id); }
+                                }
+                            }
+                        }
+
+                        Text {
+                            x: 0px;
+                            y: parent.height - 54px;
+                            width: parent.width - 122px;
+                            height: 36px;
+                            text: root.shortcut_error == "" ? "F1 always opens the palette. Escape cancels capture." : root.shortcut_error;
+                            color: root.shortcut_error == "" ? Theme.text_muted : Theme.warning;
+                            font-size: 10px;
+                            wrap: TextWrap.word-wrap;
+                            vertical-alignment: center;
+                        }
+                        QuietButton {
+                            x: parent.width - 112px;
+                            y: parent.height - 52px;
+                            width: 112px;
+                            label: "Reset Defaults";
+                            clicked => { root.command_customizations_reset(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.dirty_decision_visible: Rectangle {
+            background: #00000055;
+
+            OverlayPanel {
+                width: min(parent.width - 48px, 500px);
+                height: 174px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 3;
+
+                VerticalBox {
+                    padding: 16px;
+                    spacing: 12px;
+                    Text { text: "Save Changes"; color: Theme.text_primary; font-size: 15px; font-weight: 700; }
+                    Text {
+                        text: "Save changes to " + root.dirty_decision_title + " before closing?";
+                        color: Theme.text_secondary;
+                        font-size: 13px;
+                        wrap: TextWrap.word-wrap;
+                    }
+                    HorizontalBox {
+                        spacing: 8px;
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        QuietButton {
+                            label: "Cancel";
+                            clicked => { root.dirty_decision(root.dirty_decision_tab_id, "cancel"); root.dirty_decision_visible = false; }
+                        }
+                        QuietButton {
+                            label: "Discard";
+                            clicked => { root.dirty_decision(root.dirty_decision_tab_id, "discard"); root.dirty_decision_visible = false; }
+                        }
+                        QuietButton {
+                            label: "Save";
+                            primary: true;
+                            clicked => { root.dirty_decision(root.dirty_decision_tab_id, "save"); root.dirty_decision_visible = false; }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.conflict_visible: Rectangle {
+            background: #00000055;
+
+            OverlayPanel {
+                width: min(parent.width - 48px, 580px);
+                height: 196px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 3;
+
+                VerticalBox {
+                    padding: 16px;
+                    spacing: 10px;
+                    Text { text: "File Changed on Disk"; color: Theme.text_primary; font-size: 15px; font-weight: 700; }
+                    Text { text: root.conflict_path; color: Theme.text_muted; font-size: 12px; overflow: elide; }
+                    Text {
+                        text: "Choose which version to keep.";
+                        color: Theme.text_secondary;
+                        font-size: 13px;
+                    }
+                    HorizontalBox {
+                        spacing: 8px;
+                        Rectangle { horizontal-stretch: 1; background: transparent; }
+                        QuietButton {
+                            label: "Cancel";
+                            clicked => { root.conflict_decision(root.conflict_tab_id, "cancel"); root.conflict_visible = false; }
+                        }
+                        QuietButton {
+                            label: "Save As";
+                            clicked => { root.conflict_decision(root.conflict_tab_id, "save-as"); root.conflict_visible = false; }
+                        }
+                        QuietButton {
+                            label: "Overwrite";
+                            clicked => { root.conflict_decision(root.conflict_tab_id, "overwrite"); root.conflict_visible = false; }
+                        }
+                        QuietButton {
+                            label: "Reload";
+                            primary: true;
+                            clicked => { root.conflict_decision(root.conflict_tab_id, "reload"); root.conflict_visible = false; }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.about_visible: OverlayPanel {
+            width: min(parent.width - 48px, 440px);
+            height: min(parent.height - 32px, 480px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+
+            Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: 18px;
+                width: 54px;
+                height: 54px;
+                background: transparent;
+                Image {
+                    source: @image-url("assets/icons/texti-mark.svg");
+                    width: 54px;
+                    height: 54px;
+                }
+            }
+
+            Text { x: 18px; y: 78px; width: parent.width - 36px; height: 28px; text: "Texti"; color: Theme.text_primary; font-size: 22px; font-weight: 750; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 18px; y: 108px; width: parent.width - 36px; height: 16px; text: root.app_version; color: Theme.text_muted; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 24px; y: 134px; width: parent.width - 48px; height: 34px; text: "Local-only text editing for code, configs, notes, and logs."; color: Theme.text_secondary; font-size: 13px; wrap: TextWrap.word-wrap; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 24px; y: 170px; width: parent.width - 48px; height: 34px; text: "File contents, paths, editor state, and recovery data stay on this machine."; color: Theme.text_muted; font-size: 12px; wrap: TextWrap.word-wrap; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 18px; y: 214px; width: parent.width - 36px; height: 18px; text: "© 2026 The Clairos Group, LLC"; color: Theme.text_secondary; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 18px; y: 236px; width: parent.width - 36px; height: 18px; text: "clairos.ai"; color: Theme.blue; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+            Text { x: 18px; y: 258px; width: parent.width - 36px; height: 18px; text: "connect@clairos.ai"; color: Theme.blue; font-size: 12px; horizontal-alignment: center; vertical-alignment: center; }
+            Rectangle {
+                x: 20px;
+                y: 286px;
+                width: parent.width - 40px;
+                height: 126px;
+                clip: true;
+                background: transparent;
+                AboutSlint { width: parent.width; height: parent.height; }
+            }
+            QuietButton {
+                x: 18px;
+                y: parent.height - 49px;
+                width: parent.width - 36px;
+                label: "Close";
+                clicked => { root.close_overlays(); }
+            }
+            about-close-touch := TouchArea {
+                x: 18px;
+                y: parent.height - 49px;
+                width: parent.width - 36px;
+                height: 31px;
+                clicked => { root.close_overlays(); }
+            }
+        }
+    }
+}

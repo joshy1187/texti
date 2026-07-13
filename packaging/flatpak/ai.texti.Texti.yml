@@ -1,0 +1,33 @@
+app-id: ai.texti.Texti
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+command: texti
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # A text editor must be able to save projects outside Documents. Files remain
+  # local and are accessed only in response to explicit user actions.
+  - --filesystem=home
+modules:
+  - name: texti
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+      env:
+        CARGO_HOME: /run/build/texti/cargo-home
+    build-commands:
+      - cargo build --locked --release -p texti-app
+      - install -Dm755 target/release/texti /app/bin/texti
+      - install -Dm644 packaging/linux/texti.desktop /app/share/applications/ai.texti.Texti.desktop
+      - install -Dm644 packaging/linux/texti.svg /app/share/icons/hicolor/scalable/apps/ai.texti.Texti.svg
+      - install -Dm644 LICENSE-MIT /app/share/licenses/ai.texti.Texti/LICENSE-MIT
+      - install -Dm644 LICENSE-APACHE /app/share/licenses/ai.texti.Texti/LICENSE-APACHE
+      - install -Dm644 THIRD_PARTY_NOTICES.md /app/share/doc/texti/THIRD_PARTY_NOTICES.md
+      - sed -i 's/^Icon=texti$/Icon=ai.texti.Texti/' /app/share/applications/ai.texti.Texti.desktop
+    sources:
+      - type: dir
+        path: ../..

@@ -1,0 +1,18 @@
+[package]
+name = "texti-editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+chrono.workspace = true
+encoding_rs.workspace = true
+ropey.workspace = true
+serde.workspace = true
+texti-model = { path = "../texti-model" }
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
