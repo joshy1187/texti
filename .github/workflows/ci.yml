@@ -26,7 +26,25 @@ jobs:
       - name: Install system checks
         run: |
           sudo apt-get update
-          sudo apt-get install --yes desktop-file-utils shellcheck
+          sudo apt-get install --yes \
+            build-essential \
+            clang \
+            cmake \
+            desktop-file-utils \
+            libdbus-1-dev \
+            libfontconfig1-dev \
+            libgtk-3-dev \
+            libssl-dev \
+            libwayland-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxcb1-dev \
+            libxkbcommon-dev \
+            pkg-config \
+            shellcheck
 
       - name: Install pinned Rust toolchain
         run: |
