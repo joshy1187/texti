@@ -5,7 +5,8 @@ use commands::{
     shortcut_conflict,
 };
 use editor_surface::{
-    EditorEdit, EditorRenderConfig, EditorRuntime, EditorViewState, render_editor_with_config,
+    EditorEdit, EditorRenderConfig, EditorRuntime, EditorViewState, RenderedEditor,
+    render_cached_editor_with_config, render_editor_with_config,
 };
 use slint::winit_030::winit::event::{ElementState, MouseButton, WindowEvent};
 use slint::winit_030::winit::keyboard::{Key, ModifiersState, NamedKey};
@@ -41,6 +42,7 @@ const RECOVERY_DEBOUNCE_MS: u64 = 500;
 const MULTI_CLICK_TIMEOUT_MS: u64 = 500;
 const MULTI_CLICK_DISTANCE_PX: f32 = 5.0;
 const WRAPPED_RESIZE_DEBOUNCE_MS: u64 = 50;
+const VIEWPORT_REDRAW_MS: u64 = 8;
 
 #[derive(Default)]
 struct PointerClickTracker {
@@ -987,17 +989,11 @@ fn wire_callbacks(
 
     ui.on_minimap_scroll_requested({
         let weak = weak.clone();
-        let state = state.clone();
-        let editor = editor.clone();
         move |position| {
             if let Some(ui) = weak.upgrade() {
                 let max_y = (ui.get_editor_content_height() - editor_view_height(&ui)).max(0.0);
                 let y = max_y * position.clamp(0.0, 1.0);
                 ui.invoke_set_editor_viewport_y(y);
-                editor
-                    .borrow_mut()
-                    .set_viewport(ui.get_editor_viewport_x(), y);
-                refresh_ui(&ui, &state.borrow(), &editor);
             }
         }
     });
@@ -1120,6 +1116,11 @@ struct ResizeRuntime {
     redraw_pending: bool,
 }
 
+#[derive(Default)]
+struct ViewportRuntime {
+    redraw_pending: bool,
+}
+
 fn wire_autoscroll(
     ui: &AppWindow,
     state: Rc<RefCell<AppState>>,
@@ -1131,6 +1132,8 @@ fn wire_autoscroll(
     let timer = Rc::new(Timer::default());
     let resize_runtime = Rc::new(RefCell::new(ResizeRuntime::default()));
     let resize_timer = Rc::new(Timer::default());
+    let viewport_runtime = Rc::new(RefCell::new(ViewportRuntime::default()));
+    let viewport_timer = Rc::new(Timer::default());
     let config = AutoScrollConfig::default();
 
     ui.on_request_cancel_autoscroll({
@@ -1139,6 +1142,16 @@ fn wire_autoscroll(
         let timer = timer.clone();
         move || {
             stop_autoscroll(&weak, &runtime, &timer);
+        }
+    });
+
+    ui.on_editor_viewport_changed({
+        let weak = weak.clone();
+        let editor = editor.clone();
+        let viewport_runtime = viewport_runtime.clone();
+        let viewport_timer = viewport_timer.clone();
+        move || {
+            schedule_editor_viewport_redraw(&weak, &editor, &viewport_runtime, &viewport_timer);
         }
     });
 
@@ -1310,18 +1323,6 @@ fn wire_autoscroll(
                     if active {
                         stop_autoscroll(&weak, &runtime, &timer);
                     }
-                    let weak = weak.clone();
-                    let state = state.clone();
-                    let editor = editor.clone();
-                    Timer::single_shot(Duration::from_millis(0), move || {
-                        if let Some(ui) = weak.upgrade() {
-                            editor.borrow_mut().set_viewport(
-                                ui.get_editor_viewport_x(),
-                                ui.get_editor_viewport_y(),
-                            );
-                            refresh_ui(&ui, &state.borrow(), &editor);
-                        }
-                    });
                     EventResult::Propagate
                 }
                 WindowEvent::KeyboardInput { event, .. }
@@ -1442,6 +1443,35 @@ fn stop_autoscroll(
     if let Some(ui) = weak.upgrade() {
         ui.set_autoscroll_active(false);
     }
+}
+
+fn schedule_editor_viewport_redraw(
+    weak: &slint::Weak<AppWindow>,
+    editor: &Rc<RefCell<EditorRuntime>>,
+    runtime: &Rc<RefCell<ViewportRuntime>>,
+    timer: &Timer,
+) {
+    {
+        let mut runtime = runtime.borrow_mut();
+        if runtime.redraw_pending {
+            return;
+        }
+        runtime.redraw_pending = true;
+    }
+
+    let weak = weak.clone();
+    let editor = editor.clone();
+    let runtime = runtime.clone();
+    timer.start(
+        TimerMode::SingleShot,
+        Duration::from_millis(VIEWPORT_REDRAW_MS),
+        move || {
+            runtime.borrow_mut().redraw_pending = false;
+            if let Some(ui) = weak.upgrade() {
+                refresh_cached_editor_surface(&ui, &editor);
+            }
+        },
+    );
 }
 
 fn can_start_autoscroll_at(ui: &AppWindow, x: f64, y: f64) -> bool {
@@ -2211,36 +2241,52 @@ fn refresh_editor_surface(
         ui.set_editor_viewport_x(snapshot.active_view_state.viewport_x.max(0.0));
         ui.set_editor_viewport_y(snapshot.active_view_state.viewport_y.max(0.0));
     }
-    let viewport_width = editor_view_width(
-        ui,
-        snapshot.settings.show_line_numbers,
-        snapshot.settings.show_minimap,
-    );
-    let viewport_height = editor_view_height_for(ui, snapshot.settings.status_hints);
-    let config = EditorRenderConfig {
-        word_wrap: snapshot.settings.word_wrap,
-        viewport_width,
-        viewport_height,
-        scroll_x: ui.get_editor_viewport_x(),
-        scroll_y: ui.get_editor_viewport_y(),
-        font_size: snapshot.settings.font_size as f32,
-        cell_width: ui.get_editor_cell_width(),
-        tab_size: snapshot.settings.tab_size as usize,
-        show_whitespace: snapshot.settings.show_whitespace,
-        overscan_rows: 8,
+    let rendered = {
+        let mut editor = editor.borrow_mut();
+        render_editor_with_config(
+            &mut editor,
+            snapshot.active_buffer_id,
+            snapshot.active_revision,
+            &snapshot.editor_text,
+            &snapshot.syntax_spans,
+            editor_render_config(ui),
+        )
     };
-    let rendered = render_editor_with_config(
-        &mut editor.borrow_mut(),
-        snapshot.active_buffer_id,
-        snapshot.active_revision,
-        &snapshot.editor_text,
-        &snapshot.syntax_spans,
-        config,
-    );
     let (cursor_line, cursor_col) = editor.borrow().cursor_line_col();
     let status_text = status_with_cursor(&snapshot.status.text, cursor_line, cursor_col);
-    let (scroll_x, scroll_y) = editor.borrow().viewport();
+    apply_rendered_editor(ui, editor, rendered);
+    ui.set_status_text(status_text.into());
+}
 
+fn refresh_cached_editor_surface(ui: &AppWindow, editor: &Rc<RefCell<EditorRuntime>>) {
+    let rendered =
+        render_cached_editor_with_config(&mut editor.borrow_mut(), editor_render_config(ui));
+    if let Some(rendered) = rendered {
+        apply_rendered_editor(ui, editor, rendered);
+    }
+}
+
+fn editor_render_config(ui: &AppWindow) -> EditorRenderConfig {
+    EditorRenderConfig {
+        word_wrap: ui.get_word_wrap(),
+        viewport_width: editor_view_width(ui, ui.get_show_line_numbers(), ui.get_show_minimap()),
+        viewport_height: editor_view_height(ui),
+        scroll_x: ui.get_editor_viewport_x(),
+        scroll_y: ui.get_editor_viewport_y(),
+        font_size: ui.get_editor_font_size() as f32,
+        cell_width: ui.get_editor_cell_width(),
+        tab_size: ui.get_tab_size() as usize,
+        show_whitespace: ui.get_show_whitespace(),
+        overscan_rows: 8,
+    }
+}
+
+fn apply_rendered_editor(
+    ui: &AppWindow,
+    editor: &Rc<RefCell<EditorRuntime>>,
+    rendered: RenderedEditor,
+) {
+    let (scroll_x, scroll_y) = editor.borrow().viewport();
     ui.set_editor_viewport_x(scroll_x);
     ui.set_editor_viewport_y(scroll_y);
     ui.set_editor_rows(model_from_vec(rendered.rows));
@@ -2251,7 +2297,6 @@ fn refresh_editor_surface(
     ui.set_editor_caret_y(rendered.caret_y);
     ui.set_editor_caret_height(rendered.caret_height);
     ui.set_editor_caret_visible(rendered.caret_visible);
-    ui.set_status_text(status_text.into());
 }
 
 fn editor_view_width(ui: &AppWindow, show_line_numbers: bool, show_minimap: bool) -> f32 {
