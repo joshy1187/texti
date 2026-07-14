@@ -1,6 +1,7 @@
 use crate::{EditorUiRow, EditorUiSegment};
 use slint::{Color, SharedString};
 use std::collections::HashMap;
+use std::rc::Rc;
 use texti_model::{BufferId, SyntaxSpan};
 
 pub const LINE_HEIGHT: f32 = 17.0;
@@ -115,6 +116,9 @@ pub struct EditorRuntime {
     max_columns: usize,
     metrics: LayoutMetrics,
     caret_visible: bool,
+    render_content_key: Option<RenderContentKey>,
+    render_text: Rc<str>,
+    render_spans: Rc<[SyntaxSpan]>,
 }
 
 impl Default for EditorRuntime {
@@ -134,6 +138,9 @@ impl Default for EditorRuntime {
             max_columns: 1,
             metrics: LayoutMetrics::default(),
             caret_visible: true,
+            render_content_key: None,
+            render_text: Rc::from(""),
+            render_spans: Rc::from([]),
         }
     }
 }
@@ -597,13 +604,14 @@ impl EditorRuntime {
     }
 
     fn row_index_for_cursor(&self) -> Option<usize> {
-        self.rows
-            .iter()
-            .enumerate()
-            .rev()
-            .find(|(_, row)| self.cursor >= row.start_char && self.cursor <= row.end_char)
-            .map(|(index, _)| index)
-            .or_else(|| (!self.rows.is_empty()).then_some(self.rows.len() - 1))
+        if self.rows.is_empty() {
+            return None;
+        }
+        Some(
+            self.rows
+                .partition_point(|row| row.start_char <= self.cursor)
+                .saturating_sub(1),
+        )
     }
 
     fn complete_nonvertical_move(&mut self, extend: bool) {
@@ -722,6 +730,33 @@ impl EditorRuntime {
             .max(1);
         self.layout_key = Some(key);
     }
+
+    fn cache_render_content(
+        &mut self,
+        active_buffer_id: Option<BufferId>,
+        active_revision: u64,
+        text: &str,
+        spans: &[SyntaxSpan],
+    ) {
+        let key = RenderContentKey {
+            active_buffer_id,
+            active_revision,
+        };
+        let content_changed = self.render_content_key != Some(key);
+        if content_changed {
+            self.render_text = Rc::from(text);
+            self.render_content_key = Some(key);
+        }
+        if content_changed || self.render_spans.as_ref() != spans {
+            self.render_spans = Rc::from(spans);
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RenderContentKey {
+    active_buffer_id: Option<BufferId>,
+    active_revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -815,8 +850,41 @@ pub fn render_editor_with_config(
     } else {
         runtime.set_viewport(config.scroll_x, config.scroll_y);
     }
+    runtime.cache_render_content(active_buffer_id, active_revision, text, spans);
     runtime.ensure_layout(active_buffer_id, active_revision, text, config);
 
+    render_prepared_editor(runtime, text, spans, config)
+}
+
+pub fn render_cached_editor_with_config(
+    runtime: &mut EditorRuntime,
+    config: EditorRenderConfig,
+) -> Option<RenderedEditor> {
+    let config = config.normalized();
+    let key = runtime.render_content_key?;
+    let text = Rc::clone(&runtime.render_text);
+    let spans = Rc::clone(&runtime.render_spans);
+    runtime.set_viewport(config.scroll_x, config.scroll_y);
+    runtime.ensure_layout(
+        key.active_buffer_id,
+        key.active_revision,
+        text.as_ref(),
+        config,
+    );
+    Some(render_prepared_editor(
+        runtime,
+        text.as_ref(),
+        spans.as_ref(),
+        config,
+    ))
+}
+
+fn render_prepared_editor(
+    runtime: &EditorRuntime,
+    text: &str,
+    spans: &[SyntaxSpan],
+    config: EditorRenderConfig,
+) -> RenderedEditor {
     let (first_row, end_row) = visible_row_range(runtime.rows.len(), config);
     let mut rows = Vec::with_capacity(end_row.saturating_sub(first_row));
     let mut segments = Vec::new();
@@ -1706,6 +1774,60 @@ mod tests {
         assert!(rendered.rows.len() <= 10);
         assert!(rendered.rows.first().unwrap().line_number >= 49);
         assert!(rendered.content_height > LINE_HEIGHT * 100.0);
+    }
+
+    #[test]
+    fn cached_viewport_rendering_reuses_the_prepared_document() {
+        let mut runtime = EditorRuntime::default();
+        {
+            let text = (0..1_000)
+                .map(|line| format!("line {line}\n"))
+                .collect::<String>();
+            let _ = render_editor_with_config(
+                &mut runtime,
+                Some(1),
+                0,
+                &text,
+                &[],
+                EditorRenderConfig {
+                    viewport_height: LINE_HEIGHT * 5.0,
+                    overscan_rows: 2,
+                    ..EditorRenderConfig::default()
+                },
+            );
+        }
+
+        let rendered = render_cached_editor_with_config(
+            &mut runtime,
+            EditorRenderConfig {
+                viewport_height: LINE_HEIGHT * 5.0,
+                scroll_y: LINE_HEIGHT * 500.0,
+                overscan_rows: 2,
+                ..EditorRenderConfig::default()
+            },
+        )
+        .expect("initial render caches the document");
+
+        assert!(rendered.rows.len() <= 10);
+        assert!(rendered.rows.first().unwrap().line_number >= 499);
+        assert_eq!(runtime.viewport(), (0.0, LINE_HEIGHT * 500.0));
+        assert!(
+            rendered
+                .segments
+                .iter()
+                .any(|segment| segment.text.as_str().starts_with("line 5"))
+        );
+    }
+
+    #[test]
+    fn cached_viewport_rendering_requires_an_initial_document() {
+        assert!(
+            render_cached_editor_with_config(
+                &mut EditorRuntime::default(),
+                EditorRenderConfig::default(),
+            )
+            .is_none()
+        );
     }
 
     fn apply_edit_to_text(text: &str, edit: &EditorEdit) -> String {

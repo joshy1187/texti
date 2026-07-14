@@ -868,6 +868,9 @@ export component AppWindow inherits Window {
     in property <string> conflict_path: "";
     in-out property <length> editor_viewport_x: 0px;
     in-out property <length> editor_viewport_y: 0px;
+    // Flickable uses negative coordinates; editor state and geometry use positive offsets.
+    private property <length> editor_flick_x: 0px;
+    private property <length> editor_flick_y: 0px;
     in-out property <length> tab_viewport_x: 0px;
     in-out property <length> context_menu_x: 8px;
     in-out property <length> context_menu_y: 48px;
@@ -882,6 +885,29 @@ export component AppWindow inherits Window {
     private property <length> editor_viewport_max_y: max(0px, root.editor_content_height - editor_scroll.visible-height);
     private property <length> tab_display_width: max(96px, min(176px, (root.width - 150px) / max(1, root.tabs.length)));
     private property <bool> blocking_modal_visible: root.dirty_decision_visible || root.conflict_visible;
+
+    changed editor_viewport_x => {
+        if root.editor_flick_x != -max(0px, root.editor_viewport_x) {
+            root.editor_flick_x = -max(0px, root.editor_viewport_x);
+        }
+    }
+    changed editor_viewport_y => {
+        if root.editor_flick_y != -max(0px, root.editor_viewport_y) {
+            root.editor_flick_y = -max(0px, root.editor_viewport_y);
+        }
+    }
+    changed editor_flick_x => {
+        if root.editor_viewport_x != max(0px, -root.editor_flick_x) {
+            root.editor_viewport_x = max(0px, -root.editor_flick_x);
+        }
+        root.editor_viewport_changed();
+    }
+    changed editor_flick_y => {
+        if root.editor_viewport_y != max(0px, -root.editor_flick_y) {
+            root.editor_viewport_y = max(0px, -root.editor_flick_y);
+        }
+        root.editor_viewport_changed();
+    }
 
     callback request_minimize();
     callback request_toggle_maximize();
@@ -928,6 +954,7 @@ export component AppWindow inherits Window {
     callback text_changed(string);
     callback editor_pointer_down(float, float, bool);
     callback editor_pointer_drag(float, float);
+    callback editor_viewport_changed();
     callback search_requested(string);
     callback search_next_requested(string);
     callback search_previous_requested(string);
@@ -1216,8 +1243,8 @@ export component AppWindow inherits Window {
                             background: Theme.bg_editor;
 
                             editor_scroll := ScrollView {
-                                viewport-x <=> root.editor_viewport_x;
-                                viewport-y <=> root.editor_viewport_y;
+                                viewport-x <=> root.editor_flick_x;
+                                viewport-y <=> root.editor_flick_y;
                                 viewport-width: root.word_wrap ? parent.width : max(parent.width, root.editor_content_width);
                                 viewport-height: max(parent.height, root.editor_content_height);
                                 vertical-scrollbar-policy: ScrollBarPolicy.always-on;
